@@ -690,7 +690,7 @@ def build_n1_notebook_dict(
     }
 
     annotations: dict[str, str] = {
-        Labels.Notebook.INJECT_AUTH: "true",
+        Labels.Notebook.INJECT_OAUTH: "true",
         "notebooks.opendatahub.io/last-image-selection": image.image_selection,
         "openshift.io/display-name": notebook_name,
         "openshift.io/description": "",
@@ -838,39 +838,9 @@ def wait_for_controller_reconciliation(
 
     def _controller_reconciled() -> bool:
         container_names = {container.name for container in notebook_pod.instance.spec.containers}
-        if "kube-rbac-proxy" not in container_names:
+        if "oauth-proxy" not in container_names:
             return False
-
-        reference_grant = ReferenceGrant(
-            client=admin_client,
-            name=REFERENCE_GRANT_NAME,
-            namespace=notebook_namespace,
-        )
-        try:
-            if not reference_grant.exists:
-                return False
-        except ResourceNotFoundError:
-            return False
-
-        http_route = HTTPRoute(
-            client=admin_client,
-            name=f"nb-{notebook_namespace}-{notebook_name}",
-            namespace=_applications_namespace(),
-        )
-        try:
-            if not http_route.exists:
-                return False
-            http_route_instance = http_route.instance
-        except ResourceNotFoundError:
-            return False
-
-        http_route_status = http_route_instance.to_dict().get("status", {})
-        conditions = {
-            condition.get("type"): condition.get("status")
-            for parent in http_route_status.get("parents", [])
-            for condition in parent.get("conditions", [])
-        }
-        return conditions.get("Accepted") == "True" and conditions.get("ResolvedRefs") == "True"
+        return True
 
     try:
         for sample in TimeoutSampler(wait_timeout=timeout, sleep=5, func=_controller_reconciled):
